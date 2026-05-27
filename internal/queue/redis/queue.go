@@ -53,3 +53,21 @@ func (q *Queue) Consume(
 
 	return result[1], nil
 }
+
+// ADD THIS FUNCTION AT THE BOTTOM
+func (q *Queue) EnqueueDelayed(
+	ctx context.Context,
+	jobID string,
+	runAt time.Time,
+) error {
+	
+	// ZAdd adds to a Sorted Set. We use the Unix timestamp as the "Score"
+	return q.client.ZAdd(
+		ctx,
+		"delayed_jobs",
+		goredis.Z{
+			Score:  float64(runAt.Unix()),
+			Member: jobID,
+		},
+	).Err()
+}

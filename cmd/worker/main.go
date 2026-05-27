@@ -13,6 +13,7 @@ import (
 
 	"github.com/bhusareMayur/goqueue/internal/domain/job"
 	redisqueue "github.com/bhusareMayur/goqueue/internal/queue/redis"
+	"github.com/bhusareMayur/goqueue/internal/scheduler"
 	"github.com/bhusareMayur/goqueue/internal/storage/postgres"
 	"github.com/bhusareMayur/goqueue/internal/worker"
 )
@@ -81,6 +82,17 @@ func main() {
 
 	// STEP 7: WaitGroup
 	var wg sync.WaitGroup
+
+	// ==========================================
+	// NEW: Start the Delayed Job Scheduler
+	// ==========================================
+	sched := scheduler.NewDelayedScheduler(redisClient)
+	wg.Add(1)
+	go func() {
+		// Pass the waitgroup down so it shuts down gracefully
+		defer wg.Done()
+		sched.Start(ctx)
+	}()
 
 	log.Printf("Starting %d workers...\n", workerConcurrency)
 

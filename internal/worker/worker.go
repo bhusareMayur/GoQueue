@@ -2,7 +2,10 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log"
+	"math"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -17,11 +20,7 @@ type Worker struct {
 	service *job.Service
 }
 
-func NewWorker(
-	id int,
-	queue job.Queue,
-	service *job.Service,
-) *Worker {
+func NewWorker(id int, queue job.Queue, service *job.Service) *Worker {
 	return &Worker{
 		id:      id,
 		queue:   queue,
@@ -29,14 +28,11 @@ func NewWorker(
 	}
 }
 
-// STEP 4: Worker Accepts Context (and WaitGroup)
 func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
-	// Let main function know this worker is done when the function exits
 	defer wg.Done()
 	log.Printf("worker-%d started\n", w.id)
 
 	for {
-		// STEP 5: Add Context Check in Loop
 		select {
 		case <-ctx.Done():
 			log.Printf("worker-%d shutting down\n", w.id)
@@ -51,14 +47,10 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 			continue
 		}
 
-		// Handle the 5-second BRPop timeout cleanly
 		if jobID == "" {
 			continue
 		}
 
-		log.Printf("worker-%d received job: %s\n", w.id, jobID)
-
-		// Parse the UUID
 		parsedID, err := uuid.Parse(jobID)
 		if err != nil {
 			log.Printf("worker-%d invalid uuid error: %v\n", w.id, err)
@@ -66,37 +58,67 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 		}
 
 		// 2. Fetch job from PostgreSQL
-		_, err = w.service.GetJob(
-			context.Background(),
-			parsedID,
-		)
+		jobRec, err := w.service.GetJob(context.Background(), parsedID)
 		if err != nil {
 			log.Printf("worker-%d error fetching job from db: %v\n", w.id, err)
 			continue
 		}
 
 		// 3. Mark job as processing
-		err = w.service.UpdateJobStatus(
-			context.Background(),
-			parsedID,
-			"processing",
-		)
+		err = w.service.UpdateJobStatus(context.Background(), parsedID, "processing")
 		if err != nil {
 			log.Printf("worker-%d error updating job status to processing: %v\n", w.id, err)
 			continue
 		}
 
 		log.Printf("worker-%d processing job: %s\n", w.id, jobID)
+		time.Sleep(1 * time.Second) // Simulate work
 
-		// 4. Execute job (Simulating work)
-		time.Sleep(2 * time.Second)
+		// ============================================
+		// STEP 4: Simulate Job Failure (~50% chance)
+		// ============================================
+		var execErr error
+		if rand.Intn(2) == 0 {
+			execErr = errors.New("simulated random failure")
+		}
 
-		// 5. Mark completed
-		err = w.service.UpdateJobStatus(
-			context.Background(),
-			parsedID,
-			"completed",
-		)
+		// ============================================
+		// STEP 5: Retry Logic & Exponential Backoff
+		// ============================================
+		if execErr != nil {
+			log.Printf("worker-%d job failed: %v\n", w.id, execErr)
+			
+			retryCount := jobRec.RetryCount + 1
+
+			// STEP 8: Check Max Retries Limit
+			if retryCount > jobRec.MaxRetries {
+				log.Printf("worker-%d max retries exceeded for job %s. Marking permanently failed.\n", w.id, jobID)
+				_ = w.service.UpdateJobRetry(context.Background(), parsedID, retryCount, execErr.Error(), nil, "failed")
+				continue
+			}
+
+			// STEP 6: Calculate Exponential Backoff Delay
+			delay := time.Duration(math.Pow(2, float64(retryCount))) * time.Second
+			nextRunAt := time.Now().Add(delay)
+
+			log.Printf("retry attempt %d in %v\n", retryCount, delay)
+
+			// STEP 9: Persist Last Error and Next Retry Info
+			err = w.service.UpdateJobRetry(context.Background(), parsedID, retryCount, execErr.Error(), &nextRunAt, "pending")
+			if err != nil {
+				log.Printf("worker-%d error updating retry status: %v\n", w.id, err)
+			}
+
+			// STEP 7: Non-Blocking Delayed Retry (Using Redis ZSET)
+			err = w.queue.EnqueueDelayed(context.Background(), jobID, nextRunAt)
+			if err != nil {
+				log.Printf("worker-%d error enqueuing delayed job: %v\n", w.id, err)
+			}
+			continue
+		}
+
+		// 5. Mark completed if success path is hit
+		err = w.service.UpdateJobStatus(context.Background(), parsedID, "completed")
 		if err != nil {
 			log.Printf("worker-%d error updating job status to completed: %v\n", w.id, err)
 			continue
