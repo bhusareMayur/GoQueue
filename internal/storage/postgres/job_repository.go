@@ -93,3 +93,38 @@ func (r *JobRepository) UpdateRetry(
 	_, err := r.db.Exec(ctx, query, retryCount, lastError, nextRunAt, status, id)
 	return err
 }
+
+// NEW: MoveToDLQ uses a transaction to ensure both tables are updated safely
+func (r *JobRepository) MoveToDLQ(ctx context.Context, dj *job.DeadJob) error {
+	// Start a database transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// Defer a rollback in case anything fails. If tx.Commit() is called first, rollback does nothing.
+	defer tx.Rollback(ctx)
+
+	// 1. Insert into dead_jobs table
+	insertDLQQuery := `
+	INSERT INTO dead_jobs (id, type, payload, retry_count, failed_at, last_error)
+	VALUES ($1, $2, $3, $4, $5, $6)
+	`
+	_, err = tx.Exec(ctx, insertDLQQuery, dj.ID, dj.Type, dj.Payload, dj.RetryCount, dj.FailedAt, dj.LastError)
+	if err != nil {
+		return err
+	}
+
+	// 2. Update main jobs table status to 'failed'
+	updateJobQuery := `
+	UPDATE jobs
+	SET status = 'failed', last_error = $1, updated_at = NOW()
+	WHERE id = $2
+	`
+	_, err = tx.Exec(ctx, updateJobQuery, dj.LastError, dj.ID)
+	if err != nil {
+		return err
+	}
+
+	// Commit the transaction
+	return tx.Commit(ctx)
+}

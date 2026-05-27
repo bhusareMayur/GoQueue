@@ -14,4 +14,7 @@ type Repository interface {
 	
 	// New method for handling failures
 	UpdateRetry(ctx context.Context, id uuid.UUID, retryCount int, lastError string, nextRunAt *time.Time, status string) error
+	
+	// NEW: Method to handle DLQ movement
+	MoveToDLQ(ctx context.Context, deadJob *DeadJob) error
 }

@@ -52,3 +52,22 @@ func (s *Service) UpdateJobStatus(ctx context.Context, id uuid.UUID, status stri
 func (s *Service) UpdateJobRetry(ctx context.Context, id uuid.UUID, retryCount int, lastError string, nextRunAt *time.Time, status string) error {
 	return s.repo.UpdateRetry(ctx, id, retryCount, lastError, nextRunAt, status)
 }
+
+// NEW: MoveToDLQ fetches the job and creates a record in the DLQ via repository
+func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string) error {
+	j, err := s.GetJob(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	deadJob := &DeadJob{
+		ID:         id,
+		Type:       j.Type,
+		Payload:    j.Payload,
+		RetryCount: j.RetryCount,
+		LastError:  errMessage,
+		FailedAt:   time.Now(),
+	}
+
+	return s.repo.MoveToDLQ(ctx, deadJob)
+}

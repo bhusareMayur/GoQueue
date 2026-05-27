@@ -81,6 +81,7 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 		if rand.Intn(2) == 0 {
 			execErr = errors.New("simulated random failure")
 		}
+		// execErr = errors.New("simulated permanent failure")
 
 		// ============================================
 		// STEP 5: Retry Logic & Exponential Backoff
@@ -90,10 +91,16 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 			
 			retryCount := jobRec.RetryCount + 1
 
-			// STEP 8: Check Max Retries Limit
+			// ============================================
+			// STEP 8: Check Max Retries Limit & Move to DLQ
+			// ============================================
 			if retryCount > jobRec.MaxRetries {
-				log.Printf("worker-%d max retries exceeded for job %s. Marking permanently failed.\n", w.id, jobID)
-				_ = w.service.UpdateJobRetry(context.Background(), parsedID, retryCount, execErr.Error(), nil, "failed")
+				log.Printf("worker-%d max retries exceeded for job %s. Moving to DLQ.\n", w.id, jobID)
+				
+				err = w.service.MoveToDLQ(context.Background(), parsedID, execErr.Error())
+				if err != nil {
+					log.Printf("worker-%d error moving job to DLQ: %v\n", w.id, err)
+				}
 				continue
 			}
 
