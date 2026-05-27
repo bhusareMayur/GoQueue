@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -35,13 +36,18 @@ func (q *Queue) Consume(
 	ctx context.Context,
 ) (string, error) {
 
+	// STEP 6: Problem With BRPOP - Use 5 seconds timeout instead of 0
 	result, err := q.client.BRPop(
 		ctx,
-		0,
+		5*time.Second,
 		"jobs",
 	).Result()
 
 	if err != nil {
+		// If the error is simply a timeout (no jobs found in 5s), return empty string
+		if err == goredis.Nil {
+			return "", nil
+		}
 		return "", err
 	}
 

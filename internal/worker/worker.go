@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,23 +29,39 @@ func NewWorker(
 	}
 }
 
-func (w *Worker) Start() {
-	log.Printf("worker-%d started", w.id)
+// STEP 4: Worker Accepts Context (and WaitGroup)
+func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
+	// Let main function know this worker is done when the function exits
+	defer wg.Done()
+	log.Printf("worker-%d started\n", w.id)
 
 	for {
+		// STEP 5: Add Context Check in Loop
+		select {
+		case <-ctx.Done():
+			log.Printf("worker-%d shutting down\n", w.id)
+			return
+		default:
+		}
+
 		// 1. Consume job ID from Redis
-		jobID, err := w.queue.Consume(context.Background())
+		jobID, err := w.queue.Consume(ctx)
 		if err != nil {
-			log.Printf("worker-%d consume error: %v", w.id, err)
+			log.Printf("worker-%d consume error: %v\n", w.id, err)
 			continue
 		}
 
-		log.Printf("worker-%d received job: %s", w.id, jobID)
+		// Handle the 5-second BRPop timeout cleanly
+		if jobID == "" {
+			continue
+		}
+
+		log.Printf("worker-%d received job: %s\n", w.id, jobID)
 
 		// Parse the UUID
 		parsedID, err := uuid.Parse(jobID)
 		if err != nil {
-			log.Printf("worker-%d invalid uuid error: %v", w.id, err)
+			log.Printf("worker-%d invalid uuid error: %v\n", w.id, err)
 			continue
 		}
 
@@ -54,7 +71,7 @@ func (w *Worker) Start() {
 			parsedID,
 		)
 		if err != nil {
-			log.Printf("worker-%d error fetching job from db: %v", w.id, err)
+			log.Printf("worker-%d error fetching job from db: %v\n", w.id, err)
 			continue
 		}
 
@@ -65,11 +82,11 @@ func (w *Worker) Start() {
 			"processing",
 		)
 		if err != nil {
-			log.Printf("worker-%d error updating job status to processing: %v", w.id, err)
+			log.Printf("worker-%d error updating job status to processing: %v\n", w.id, err)
 			continue
 		}
 
-		log.Printf("worker-%d processing job: %s", w.id, jobID)
+		log.Printf("worker-%d processing job: %s\n", w.id, jobID)
 
 		// 4. Execute job (Simulating work)
 		time.Sleep(2 * time.Second)
@@ -81,10 +98,10 @@ func (w *Worker) Start() {
 			"completed",
 		)
 		if err != nil {
-			log.Printf("worker-%d error updating job status to completed: %v", w.id, err)
+			log.Printf("worker-%d error updating job status to completed: %v\n", w.id, err)
 			continue
 		}
 
-		log.Printf("worker-%d job completed: %s", w.id, jobID)
+		log.Printf("worker-%d job completed: %s\n", w.id, jobID)
 	}
 }
