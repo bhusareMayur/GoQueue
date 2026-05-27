@@ -11,37 +11,40 @@ import (
 )
 
 type Worker struct {
+	id      int
 	queue   job.Queue
 	service *job.Service
 }
 
 func NewWorker(
+	id int,
 	queue job.Queue,
 	service *job.Service,
 ) *Worker {
 	return &Worker{
+		id:      id,
 		queue:   queue,
 		service: service,
 	}
 }
 
 func (w *Worker) Start() {
-	log.Println("worker started")
+	log.Printf("worker-%d started", w.id)
 
 	for {
 		// 1. Consume job ID from Redis
 		jobID, err := w.queue.Consume(context.Background())
 		if err != nil {
-			log.Println("consume error:", err)
+			log.Printf("worker-%d consume error: %v", w.id, err)
 			continue
 		}
 
-		log.Println("received job:", jobID)
+		log.Printf("worker-%d received job: %s", w.id, jobID)
 
 		// Parse the UUID
 		parsedID, err := uuid.Parse(jobID)
 		if err != nil {
-			log.Println("invalid uuid error:", err)
+			log.Printf("worker-%d invalid uuid error: %v", w.id, err)
 			continue
 		}
 
@@ -51,7 +54,7 @@ func (w *Worker) Start() {
 			parsedID,
 		)
 		if err != nil {
-			log.Println("error fetching job from db:", err)
+			log.Printf("worker-%d error fetching job from db: %v", w.id, err)
 			continue
 		}
 
@@ -62,11 +65,11 @@ func (w *Worker) Start() {
 			"processing",
 		)
 		if err != nil {
-			log.Println("error updating job status to processing:", err)
+			log.Printf("worker-%d error updating job status to processing: %v", w.id, err)
 			continue
 		}
 
-		log.Println("processing job:", jobID)
+		log.Printf("worker-%d processing job: %s", w.id, jobID)
 
 		// 4. Execute job (Simulating work)
 		time.Sleep(2 * time.Second)
@@ -78,10 +81,10 @@ func (w *Worker) Start() {
 			"completed",
 		)
 		if err != nil {
-			log.Println("error updating job status to completed:", err)
+			log.Printf("worker-%d error updating job status to completed: %v", w.id, err)
 			continue
 		}
 
-		log.Println("job completed:", jobID)
+		log.Printf("worker-%d job completed: %s", w.id, jobID)
 	}
 }

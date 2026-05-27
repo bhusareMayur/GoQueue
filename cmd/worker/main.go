@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 
@@ -22,6 +23,14 @@ func main() {
 	// Read environment variables
 	postgresURL := os.Getenv("POSTGRES_URL")
 	redisAddr := os.Getenv("REDIS_ADDR")
+	concurrencyStr := os.Getenv("WORKER_CONCURRENCY")
+
+	// Parse concurrency, default to 5 if not set or invalid
+	concurrency, err := strconv.Atoi(concurrencyStr)
+	if err != nil || concurrency <= 0 {
+		log.Printf("invalid or missing WORKER_CONCURRENCY, defaulting to 5")
+		concurrency = 5
+	}
 
 	// PostgreSQL connection
 	dbPool, err := postgres.NewPool(postgresURL)
@@ -42,9 +51,14 @@ func main() {
 	// Service
 	service := job.NewService(repo, queue)
 
-	// Worker
-	w := worker.NewWorker(queue, service)
+	log.Printf("starting worker pool with concurrency: %d", concurrency)
 
-	// Start worker (this blocks forever in the for-loop)
-	w.Start()
+	// Spawn worker goroutines
+	for i := 1; i <= concurrency; i++ {
+		w := worker.NewWorker(i, queue, service)
+		go w.Start() // Start each worker in a separate goroutine
+	}
+
+	// Block main thread from exiting forever
+	select {}
 }
