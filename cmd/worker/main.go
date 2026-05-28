@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/bhusareMayur/goqueue/internal/domain/job"
 	redisqueue "github.com/bhusareMayur/goqueue/internal/queue/redis"
@@ -20,13 +22,11 @@ import (
 )
 
 func main() {
-	// Load .env
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("no .env file found")
 	}
 
-	// Read environment variables
 	postgresURL := os.Getenv("POSTGRES_URL")
 	redisAddr := os.Getenv("REDIS_ADDR")
 	
@@ -35,37 +35,28 @@ func main() {
 		workerConcurrency = wc
 	}
 
-	// PostgreSQL connection
 	dbPool, err := postgres.NewPool(postgresURL)
 	if err != nil {
 		log.Fatal(err)
 	}
-	
 	defer func() {
 		log.Println("closing postgres connection")
 		dbPool.Close()
 	}()
 
-	// Redis connection
 	redisClient := redisqueue.NewClient(redisAddr)
 	defer func() {
 		log.Println("closing redis connection")
 		redisClient.Close()
 	}()
 
-	// Repository, Queue, Service setup
 	repo := postgres.NewJobRepository(dbPool)
 	queue := redisqueue.NewQueue(redisClient)
 	service := job.NewService(repo, queue)
 
-	// Context and graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	signalChan := make(chan os.Signal, 1)
-	signal.Notify(
-		signalChan,
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
+	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		<-signalChan
@@ -75,7 +66,18 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// 1. Start Delayed Job Scheduler
+	// ==========================================
+	// NEW: Start Worker Metrics Server
+	// ==========================================
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		log.Println("worker metrics server running on port :2112")
+		if err := http.ListenAndServe(":2112", mux); err != nil {
+			log.Printf("metrics server error: %v\n", err)
+		}
+	}()
+
 	sched := scheduler.NewDelayedScheduler(redisClient)
 	wg.Add(1)
 	go func() {
@@ -83,14 +85,10 @@ func main() {
 		sched.Start(ctx)
 	}()
 
-	// ==========================================
-	// 2. NEW: Start the Reaper Service
-	// ==========================================
 	reaperSvc := reaper.NewReaper(service, queue)
 	wg.Add(1)
 	go reaperSvc.Start(ctx, &wg)
 
-	// 3. Start Workers
 	log.Printf("Starting %d workers...\n", workerConcurrency)
 	for i := 1; i <= workerConcurrency; i++ {
 		w := worker.NewWorker(i, queue, service)
@@ -98,7 +96,6 @@ func main() {
 		go w.Start(ctx, &wg)
 	}
 
-	// Block until everything shuts down cleanly
 	wg.Wait()
 	log.Println("graceful shutdown complete")
 }

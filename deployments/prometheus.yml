@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s # Check for metrics every 5 seconds
+
+scrape_configs:
+  - job_name: 'goqueue_api'
+    static_configs:
+      - targets: ['host.docker.internal:8080'] # Make sure APP_PORT matches this
+  
+  - job_name: 'goqueue_workers'
+    static_configs:
+      - targets: ['host.docker.internal:2112']

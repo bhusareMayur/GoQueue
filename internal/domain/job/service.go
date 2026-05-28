@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/bhusareMayur/goqueue/internal/observability/metrics"
 )
 
 type Service struct {
@@ -44,6 +46,9 @@ func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte,
 		return nil, err
 	}
 
+	// NEW: Record successful enqueue metric
+	metrics.JobsEnqueued.WithLabelValues(j.Priority).Inc()
+
 	return j, nil
 }
 
@@ -75,7 +80,14 @@ func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string
 		FailedAt:   time.Now(),
 	}
 
-	return s.repo.MoveToDLQ(ctx, deadJob)
+	err = s.repo.MoveToDLQ(ctx, deadJob)
+	
+	// NEW: Record DLQ metric
+	if err == nil {
+		metrics.DeadLetterJobs.WithLabelValues(j.Priority).Inc()
+	}
+
+	return err
 }
 
 func (s *Service) ClaimJob(ctx context.Context, id uuid.UUID, workerID string) error {

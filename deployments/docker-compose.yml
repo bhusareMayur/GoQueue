@@ -14,3 +14,22 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+
+  # NEW: Prometheus Service
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Fixes localhost networking for Linux users
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Sets the default password to 'admin'
+    depends_on:
+      - prometheus
