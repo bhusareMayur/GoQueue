@@ -13,6 +13,7 @@ import (
 
 	"github.com/bhusareMayur/goqueue/internal/domain/job"
 	redisqueue "github.com/bhusareMayur/goqueue/internal/queue/redis"
+	"github.com/bhusareMayur/goqueue/internal/reaper"
 	"github.com/bhusareMayur/goqueue/internal/scheduler"
 	"github.com/bhusareMayur/goqueue/internal/storage/postgres"
 	"github.com/bhusareMayur/goqueue/internal/worker"
@@ -40,7 +41,6 @@ func main() {
 		log.Fatal(err)
 	}
 	
-	// STEP 8: Graceful Resource Cleanup
 	defer func() {
 		log.Println("closing postgres connection")
 		dbPool.Close()
@@ -53,19 +53,13 @@ func main() {
 		redisClient.Close()
 	}()
 
-	// Repository
+	// Repository, Queue, Service setup
 	repo := postgres.NewJobRepository(dbPool)
-
-	// Queue
 	queue := redisqueue.NewQueue(redisClient)
-
-	// Service
 	service := job.NewService(repo, queue)
 
-	// STEP 1: Root Context
+	// Context and graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// STEP 2: OS Signal Channel
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(
 		signalChan,
@@ -73,40 +67,38 @@ func main() {
 		syscall.SIGTERM,
 	)
 
-	// STEP 3: Shutdown Goroutine
 	go func() {
 		<-signalChan
 		log.Println("shutdown signal received")
 		cancel()
 	}()
 
-	// STEP 7: WaitGroup
 	var wg sync.WaitGroup
 
-	// ==========================================
-	// NEW: Start the Delayed Job Scheduler
-	// ==========================================
+	// 1. Start Delayed Job Scheduler
 	sched := scheduler.NewDelayedScheduler(redisClient)
 	wg.Add(1)
 	go func() {
-		// Pass the waitgroup down so it shuts down gracefully
 		defer wg.Done()
 		sched.Start(ctx)
 	}()
 
-	log.Printf("Starting %d workers...\n", workerConcurrency)
+	// ==========================================
+	// 2. NEW: Start the Reaper Service
+	// ==========================================
+	reaperSvc := reaper.NewReaper(service, queue)
+	wg.Add(1)
+	go reaperSvc.Start(ctx, &wg)
 
-	// Start workers dynamically based on ENV variable
+	// 3. Start Workers
+	log.Printf("Starting %d workers...\n", workerConcurrency)
 	for i := 1; i <= workerConcurrency; i++ {
 		w := worker.NewWorker(i, queue, service)
 		wg.Add(1)
-		
-		// Run worker in a goroutine
 		go w.Start(ctx, &wg)
 	}
 
-	// Main thread blocks here until all workers execute wg.Done()
+	// Block until everything shuts down cleanly
 	wg.Wait()
-
 	log.Println("graceful shutdown complete")
 }

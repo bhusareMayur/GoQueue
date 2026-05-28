@@ -26,7 +26,7 @@ func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte)
 		Payload:    payload,
 		Status:     "pending",
 		RetryCount: 0,
-		MaxRetries: 5, // Set default max retries
+		MaxRetries: 5,
 	}
 
 	if err := s.repo.Create(ctx, j); err != nil {
@@ -48,12 +48,10 @@ func (s *Service) UpdateJobStatus(ctx context.Context, id uuid.UUID, status stri
 	return s.repo.UpdateStatus(ctx, id, status)
 }
 
-// UpdateJobRetry saves the failure state and calculates the next run backoff
 func (s *Service) UpdateJobRetry(ctx context.Context, id uuid.UUID, retryCount int, lastError string, nextRunAt *time.Time, status string) error {
 	return s.repo.UpdateRetry(ctx, id, retryCount, lastError, nextRunAt, status)
 }
 
-// NEW: MoveToDLQ fetches the job and creates a record in the DLQ via repository
 func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string) error {
 	j, err := s.GetJob(ctx, id)
 	if err != nil {
@@ -70,4 +68,22 @@ func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string
 	}
 
 	return s.repo.MoveToDLQ(ctx, deadJob)
+}
+
+// ==========================================
+// NEW: Visibility Timeout & Reaper Functions
+// ==========================================
+
+func (s *Service) ClaimJob(ctx context.Context, id uuid.UUID, workerID string) error {
+	return s.repo.ClaimJob(ctx, id, workerID)
+}
+
+func (s *Service) GetStuckJobs(ctx context.Context, timeout time.Duration) ([]*Job, error) {
+	// Cutoff is the current time minus the timeout duration
+	cutoffTime := time.Now().Add(-timeout)
+	return s.repo.GetStuckJobs(ctx, cutoffTime)
+}
+
+func (s *Service) RequeueStuckJob(ctx context.Context, id uuid.UUID) error {
+	return s.repo.RequeueStuckJob(ctx, id)
 }

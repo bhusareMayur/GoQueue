@@ -12,9 +12,11 @@ type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*Job, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
 	
-	// New method for handling failures
 	UpdateRetry(ctx context.Context, id uuid.UUID, retryCount int, lastError string, nextRunAt *time.Time, status string) error
-	
-	// NEW: Method to handle DLQ movement
 	MoveToDLQ(ctx context.Context, deadJob *DeadJob) error
+
+	// NEW: Visibility Timeout & Reaper Methods
+	ClaimJob(ctx context.Context, id uuid.UUID, workerID string) error
+	GetStuckJobs(ctx context.Context, cutoffTime time.Time) ([]*Job, error)
+	RequeueStuckJob(ctx context.Context, id uuid.UUID) error
 }

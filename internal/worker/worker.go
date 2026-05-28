@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -32,10 +33,12 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 	log.Printf("worker-%d started\n", w.id)
 
+	workerName := fmt.Sprintf("worker-%d", w.id)
+
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("worker-%d shutting down\n", w.id)
+			log.Printf("%s shutting down\n", workerName)
 			return
 		default:
 		}
@@ -43,7 +46,7 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 		// 1. Consume job ID from Redis
 		jobID, err := w.queue.Consume(ctx)
 		if err != nil {
-			log.Printf("worker-%d consume error: %v\n", w.id, err)
+			log.Printf("%s consume error: %v\n", workerName, err)
 			continue
 		}
 
@@ -53,73 +56,73 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 
 		parsedID, err := uuid.Parse(jobID)
 		if err != nil {
-			log.Printf("worker-%d invalid uuid error: %v\n", w.id, err)
+			log.Printf("%s invalid uuid error: %v\n", workerName, err)
 			continue
 		}
 
 		// 2. Fetch job from PostgreSQL
 		jobRec, err := w.service.GetJob(context.Background(), parsedID)
 		if err != nil {
-			log.Printf("worker-%d error fetching job from db: %v\n", w.id, err)
+			log.Printf("%s error fetching job from db: %v\n", workerName, err)
 			continue
 		}
 
-		// 3. Mark job as processing
-		err = w.service.UpdateJobStatus(context.Background(), parsedID, "processing")
+		// ============================================
+		// 3. NEW: Claim job for Visibility Timeout
+		// ============================================
+		err = w.service.ClaimJob(context.Background(), parsedID, workerName)
 		if err != nil {
-			log.Printf("worker-%d error updating job status to processing: %v\n", w.id, err)
+			log.Printf("%s error claiming job: %v\n", workerName, err)
 			continue
 		}
 
-		log.Printf("worker-%d processing job: %s\n", w.id, jobID)
-		time.Sleep(1 * time.Second) // Simulate work
+		log.Printf("%s processing job: %s\n", workerName, jobID)
+		
+		// Simulate work
+		time.Sleep(1 * time.Second) 
 
-		// ============================================
-		// STEP 4: Simulate Job Failure (~50% chance)
-		// ============================================
+		// *To test the Reaper, uncomment this line below to simulate a HARD CRASH!*
+		// if rand.Intn(3) == 0 { log.Fatalf("%s CRASHED mid-job!", workerName) }
+
+		// 4. Simulate Job Failure (~50% chance)
 		var execErr error
 		if rand.Intn(2) == 0 {
 			execErr = errors.New("simulated random failure")
 		}
-		// execErr = errors.New("simulated permanent failure")
 
-		// ============================================
-		// STEP 5: Retry Logic & Exponential Backoff
-		// ============================================
+		// 5. Retry Logic & Exponential Backoff
 		if execErr != nil {
-			log.Printf("worker-%d job failed: %v\n", w.id, execErr)
+			log.Printf("%s job failed: %v\n", workerName, execErr)
 			
 			retryCount := jobRec.RetryCount + 1
 
-			// ============================================
-			// STEP 8: Check Max Retries Limit & Move to DLQ
-			// ============================================
+			// 8. Check Max Retries Limit & Move to DLQ
 			if retryCount > jobRec.MaxRetries {
-				log.Printf("worker-%d max retries exceeded for job %s. Moving to DLQ.\n", w.id, jobID)
+				log.Printf("%s max retries exceeded for job %s. Moving to DLQ.\n", workerName, jobID)
 				
 				err = w.service.MoveToDLQ(context.Background(), parsedID, execErr.Error())
 				if err != nil {
-					log.Printf("worker-%d error moving job to DLQ: %v\n", w.id, err)
+					log.Printf("%s error moving job to DLQ: %v\n", workerName, err)
 				}
 				continue
 			}
 
-			// STEP 6: Calculate Exponential Backoff Delay
+			// 6. Calculate Exponential Backoff Delay
 			delay := time.Duration(math.Pow(2, float64(retryCount))) * time.Second
 			nextRunAt := time.Now().Add(delay)
 
 			log.Printf("retry attempt %d in %v\n", retryCount, delay)
 
-			// STEP 9: Persist Last Error and Next Retry Info
+			// 9. Persist Last Error and Next Retry Info
 			err = w.service.UpdateJobRetry(context.Background(), parsedID, retryCount, execErr.Error(), &nextRunAt, "pending")
 			if err != nil {
-				log.Printf("worker-%d error updating retry status: %v\n", w.id, err)
+				log.Printf("%s error updating retry status: %v\n", workerName, err)
 			}
 
-			// STEP 7: Non-Blocking Delayed Retry (Using Redis ZSET)
+			// 7. Non-Blocking Delayed Retry (Using Redis ZSET)
 			err = w.queue.EnqueueDelayed(context.Background(), jobID, nextRunAt)
 			if err != nil {
-				log.Printf("worker-%d error enqueuing delayed job: %v\n", w.id, err)
+				log.Printf("%s error enqueuing delayed job: %v\n", workerName, err)
 			}
 			continue
 		}
@@ -127,10 +130,10 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 		// 5. Mark completed if success path is hit
 		err = w.service.UpdateJobStatus(context.Background(), parsedID, "completed")
 		if err != nil {
-			log.Printf("worker-%d error updating job status to completed: %v\n", w.id, err)
+			log.Printf("%s error updating job status to completed: %v\n", workerName, err)
 			continue
 		}
 
-		log.Printf("worker-%d job completed: %s\n", w.id, jobID)
+		log.Printf("%s job completed: %s\n", workerName, jobID)
 	}
 }
