@@ -22,20 +22,34 @@ func NewService(repo Repository, queue Queue) *Service {
 	}
 }
 
-func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte, priority string) (*Job, error) {
+func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte, priority string, idempotencyKey string) (*Job, error) {
+	// NEW: Check for idempotency
+	if idempotencyKey != "" {
+		existingJob, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
+		if err == nil && existingJob != nil {
+			return existingJob, nil // Return the already existing job, preventing duplicates
+		}
+	}
+
 	priority = strings.ToLower(priority)
 	if priority != "high" && priority != "medium" && priority != "low" {
 		priority = "default"
 	}
 
+	var idKey *string
+	if idempotencyKey != "" {
+		idKey = &idempotencyKey
+	}
+
 	j := &Job{
-		ID:         uuid.New(),
-		Type:       jobType,
-		Payload:    payload,
-		Status:     "pending",
-		Priority:   priority,
-		RetryCount: 0,
-		MaxRetries: 5,
+		ID:             uuid.New(),
+		Type:           jobType,
+		Payload:        payload,
+		Status:         "pending",
+		Priority:       priority,
+		RetryCount:     0,
+		MaxRetries:     5,
+		IdempotencyKey: idKey,
 	}
 
 	if err := s.repo.Create(ctx, j); err != nil {
@@ -46,7 +60,6 @@ func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte,
 		return nil, err
 	}
 
-	// NEW: Record successful enqueue metric
 	metrics.JobsEnqueued.WithLabelValues(j.Priority).Inc()
 
 	return j, nil
@@ -82,7 +95,6 @@ func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string
 
 	err = s.repo.MoveToDLQ(ctx, deadJob)
 	
-	// NEW: Record DLQ metric
 	if err == nil {
 		metrics.DeadLetterJobs.WithLabelValues(j.Priority).Inc()
 	}

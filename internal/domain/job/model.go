@@ -11,7 +11,7 @@ type Job struct {
 	Type                string
 	Payload             []byte
 	Status              string
-	Priority            string     // NEW: Priority level (high, medium, low, default)
+	Priority            string
 	RetryCount          int
 	MaxRetries          int
 	NextRunAt           *time.Time
@@ -20,4 +20,5 @@ type Job struct {
 	UpdatedAt           time.Time
 	WorkerID            *string
 	ProcessingStartedAt *time.Time
+	IdempotencyKey      *string    // NEW: Idempotency Key
 }

@@ -12,7 +12,7 @@ import (
 type CreateJobRequest struct {
 	Type     string          `json:"type"`
 	Payload  json.RawMessage `json:"payload"`
-	Priority string          `json:"priority"` // NEW: Read priority from client request
+	Priority string          `json:"priority"`
 }
 
 type UpdateJobStatusRequest struct {
@@ -50,11 +50,15 @@ func (h *JobHandler) CreateJob(
 		return
 	}
 
+	// NEW: Extract Idempotency Key from Request Headers
+	idempotencyKey := r.Header.Get("Idempotency-Key")
+
 	j, err := h.service.CreateJob(
 		r.Context(),
 		req.Type,
 		req.Payload,
-		req.Priority, // Pass Priority to service
+		req.Priority,
+		idempotencyKey,
 	)
 
 	if err != nil {
