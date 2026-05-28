@@ -47,6 +47,9 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 		jobID, err := w.queue.Consume(ctx)
 		if err != nil {
 			log.Printf("%s consume error: %v\n", workerName, err)
+			// NEW: Add a sleep delay to prevent a "tight loop" 
+			// when Redis is down. This stops the log spam and CPU spike.
+			time.Sleep(2 * time.Second)
 			continue
 		}
 

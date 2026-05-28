@@ -67,9 +67,16 @@ func main() {
 		service,
 	)
 
+	// NEW: Initialize Health Handler
+	healthHandler := handlers.NewHealthHandler(
+		dbPool,
+		redisClient,
+	)
+
 	// Router
 	router := api.NewRouter(
 		jobHandler,
+		healthHandler, // NEW: Inject into router
 	)
 
 	log.Println("API server running on port :", port)

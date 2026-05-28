@@ -48,6 +48,10 @@ func (s *DelayedScheduler) processDelayedJobs(ctx context.Context) {
 	jobs, err := s.client.ZRangeByScore(ctx, "delayed_jobs", opt).Result()
 	if err != nil {
 		log.Printf("scheduler error fetching delayed jobs: %v\n", err)
+		// NEW: Add backoff to the scheduler. 
+		// If Redis is down, wait a few seconds before the next tick 
+		// to prevent go-redis internal connection pool spam.
+		time.Sleep(3 * time.Second)
 		return
 	}
 
