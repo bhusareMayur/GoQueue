@@ -22,12 +22,11 @@ func NewService(repo Repository, queue Queue) *Service {
 	}
 }
 
-func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte, priority string, idempotencyKey string) (*Job, error) {
-	// NEW: Check for idempotency
+func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte, priority string, idempotencyKey string, correlationID string) (*Job, error) {
 	if idempotencyKey != "" {
 		existingJob, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
 		if err == nil && existingJob != nil {
-			return existingJob, nil // Return the already existing job, preventing duplicates
+			return existingJob, nil
 		}
 	}
 
@@ -40,6 +39,11 @@ func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte,
 	if idempotencyKey != "" {
 		idKey = &idempotencyKey
 	}
+	
+	var corrID *string
+	if correlationID != "" {
+		corrID = &correlationID
+	}
 
 	j := &Job{
 		ID:             uuid.New(),
@@ -50,6 +54,7 @@ func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte,
 		RetryCount:     0,
 		MaxRetries:     5,
 		IdempotencyKey: idKey,
+		CorrelationID:  corrID,
 	}
 
 	if err := s.repo.Create(ctx, j); err != nil {
@@ -84,13 +89,14 @@ func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string
 	}
 
 	deadJob := &DeadJob{
-		ID:         id,
-		Type:       j.Type,
-		Payload:    j.Payload,
-		Priority:   j.Priority,
-		RetryCount: j.RetryCount,
-		LastError:  errMessage,
-		FailedAt:   time.Now(),
+		ID:            id,
+		Type:          j.Type,
+		Payload:       j.Payload,
+		Priority:      j.Priority,
+		RetryCount:    j.RetryCount,
+		LastError:     errMessage,
+		FailedAt:      time.Now(),
+		CorrelationID: j.CorrelationID,
 	}
 
 	err = s.repo.MoveToDLQ(ctx, deadJob)

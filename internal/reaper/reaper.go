@@ -2,7 +2,7 @@ package reaper
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -23,7 +23,9 @@ func NewReaper(service *job.Service, queue job.Queue) *Reaper {
 
 func (r *Reaper) Start(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	log.Println("reaper service started")
+	
+	reaperLogger := slog.With("component", "reaper")
+	reaperLogger.Info("reaper service started")
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -31,18 +33,18 @@ func (r *Reaper) Start(ctx context.Context, wg *sync.WaitGroup) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("reaper service shutting down")
+			reaperLogger.Info("reaper service shutting down")
 			return
 		case <-ticker.C:
-			r.processStuckJobs(ctx)
+			r.processStuckJobs(ctx, reaperLogger)
 		}
 	}
 }
 
-func (r *Reaper) processStuckJobs(ctx context.Context) {
+func (r *Reaper) processStuckJobs(ctx context.Context, logger *slog.Logger) {
 	stuckJobs, err := r.service.GetStuckJobs(ctx, 30*time.Second)
 	if err != nil {
-		log.Printf("reaper error fetching stuck jobs: %v\n", err)
+		logger.Error("error fetching stuck jobs", "error", err)
 		return
 	}
 
@@ -52,31 +54,35 @@ func (r *Reaper) processStuckJobs(ctx context.Context) {
 			workerID = *j.WorkerID
 		}
 		
-		log.Printf("reaper detected stuck job %s (crashed worker: %s)\n", j.ID, workerID)
+		jobLogger := logger.With("job_id", j.ID)
+		if j.CorrelationID != nil {
+			jobLogger = jobLogger.With("correlation_id", *j.CorrelationID)
+		}
+		
+		jobLogger.Warn("detected stuck job", "crashed_worker", workerID)
 
 		newRetryCount := j.RetryCount + 1
 		if newRetryCount > j.MaxRetries {
-			log.Printf("reaper moving job %s to DLQ (max retries exceeded)\n", j.ID)
+			jobLogger.Warn("max retries exceeded, moving to DLQ")
 			err := r.service.MoveToDLQ(ctx, j.ID, "visibility timeout exceeded")
 			if err != nil {
-				log.Printf("reaper error moving job %s to DLQ: %v\n", j.ID, err)
+				jobLogger.Error("error moving job to DLQ", "error", err)
 			}
 			continue
 		}
 
 		err = r.service.RequeueStuckJob(ctx, j.ID)
 		if err != nil {
-			log.Printf("reaper error requeueing job %s in db: %v\n", j.ID, err)
+			jobLogger.Error("error requeueing job in db", "error", err)
 			continue
 		}
 
-		// Push back to correct priority queue
 		err = r.queue.Enqueue(ctx, j.ID.String(), j.Priority)
 		if err != nil {
-			log.Printf("reaper error enqueueing job %s to redis: %v\n", j.ID, err)
+			jobLogger.Error("error enqueueing job to redis", "error", err)
 			continue
 		}
 
-		log.Printf("reaper successfully requeued job %s\n", j.ID)
+		jobLogger.Info("successfully requeued stuck job")
 	}
 }

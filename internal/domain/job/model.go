@@ -20,5 +20,6 @@ type Job struct {
 	UpdatedAt           time.Time
 	WorkerID            *string
 	ProcessingStartedAt *time.Time
-	IdempotencyKey      *string    // NEW: Idempotency Key
+	IdempotencyKey      *string
+	CorrelationID       *string // NEW: Correlation ID for structured logging
 }

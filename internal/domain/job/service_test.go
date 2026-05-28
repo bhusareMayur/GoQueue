@@ -67,8 +67,8 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 
 		idempotencyKey := "test-key-123"
 
-		// Execute
-		j, err := svc.CreateJob(context.Background(), "email", []byte(`{}`), "high", idempotencyKey)
+		// Execute - Added "" as the 6th argument for correlationID
+		j, err := svc.CreateJob(context.Background(), "email", []byte(`{}`), "high", idempotencyKey, "")
 
 		// Assert
 		require.NoError(t, err)
@@ -97,8 +97,8 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 		queue := &mockQueue{}
 		svc := NewService(repo, queue)
 
-		// Execute
-		j, err := svc.CreateJob(context.Background(), "email", []byte(`{}`), "high", idempotencyKey)
+		// Execute - Added "" as the 6th argument for correlationID
+		j, err := svc.CreateJob(context.Background(), "email", []byte(`{}`), "high", idempotencyKey, "")
 
 		// Assert
 		require.NoError(t, err)
@@ -115,8 +115,8 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 		queue := &mockQueue{}
 		svc := NewService(repo, queue)
 
-		// Execute with an empty string for the idempotency key
-		j, err := svc.CreateJob(context.Background(), "image", []byte(`{}`), "low", "")
+		// Execute with an empty string for the idempotency key AND correlationID
+		j, err := svc.CreateJob(context.Background(), "image", []byte(`{}`), "low", "", "")
 
 		// Assert
 		require.NoError(t, err)

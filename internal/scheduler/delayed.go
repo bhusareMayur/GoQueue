@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -21,7 +21,8 @@ func NewDelayedScheduler(client *goredis.Client) *DelayedScheduler {
 }
 
 func (s *DelayedScheduler) Start(ctx context.Context) {
-	log.Println("delayed job scheduler started")
+	schedLogger := slog.With("component", "delayed_scheduler")
+	schedLogger.Info("delayed job scheduler started")
 	
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -29,15 +30,15 @@ func (s *DelayedScheduler) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("delayed job scheduler shutting down")
+			schedLogger.Info("delayed job scheduler shutting down")
 			return
 		case <-ticker.C:
-			s.processDelayedJobs(ctx)
+			s.processDelayedJobs(ctx, schedLogger)
 		}
 	}
 }
 
-func (s *DelayedScheduler) processDelayedJobs(ctx context.Context) {
+func (s *DelayedScheduler) processDelayedJobs(ctx context.Context, logger *slog.Logger) {
 	now := time.Now().Unix()
 
 	opt := &goredis.ZRangeBy{
@@ -47,19 +48,15 @@ func (s *DelayedScheduler) processDelayedJobs(ctx context.Context) {
 
 	jobs, err := s.client.ZRangeByScore(ctx, "delayed_jobs", opt).Result()
 	if err != nil {
-		log.Printf("scheduler error fetching delayed jobs: %v\n", err)
-		// NEW: Add backoff to the scheduler. 
-		// If Redis is down, wait a few seconds before the next tick 
-		// to prevent go-redis internal connection pool spam.
+		logger.Error("error fetching delayed jobs", "error", err)
 		time.Sleep(3 * time.Second)
 		return
 	}
 
 	for _, member := range jobs {
-		// Split the member string to extract JobID and Priority
 		parts := strings.SplitN(member, ":", 2)
 		jobID := parts[0]
-		queueName := "jobs" // default
+		queueName := "jobs"
 		
 		if len(parts) == 2 {
 			queueName = "jobs:" + parts[1]
@@ -67,14 +64,14 @@ func (s *DelayedScheduler) processDelayedJobs(ctx context.Context) {
 
 		pipe := s.client.TxPipeline()
 		pipe.ZRem(ctx, "delayed_jobs", member)
-		pipe.LPush(ctx, queueName, jobID) // Push to correct priority queue
+		pipe.LPush(ctx, queueName, jobID)
 
 		_, err := pipe.Exec(ctx)
 		if err != nil {
-			log.Printf("scheduler error moving job %s: %v\n", jobID, err)
+			logger.Error("error moving job", "job_id", jobID, "error", err)
 			continue
 		}
 		
-		log.Printf("scheduler moved job %s back to %s\n", jobID, queueName)
+		logger.Info("moved delayed job back to queue", "job_id", jobID, "target_queue", queueName)
 	}
 }

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,12 +19,16 @@ import (
 	"github.com/bhusareMayur/goqueue/internal/scheduler"
 	"github.com/bhusareMayur/goqueue/internal/storage/postgres"
 	"github.com/bhusareMayur/goqueue/internal/worker"
+	"github.com/bhusareMayur/goqueue/pkg/logger"
 )
 
 func main() {
+	// Initialize JSON Logger
+	logger.InitJSONLogger()
+
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("no .env file found")
+		slog.Warn("no .env file found, using system environment variables")
 	}
 
 	postgresURL := os.Getenv("POSTGRES_URL")
@@ -37,16 +41,17 @@ func main() {
 
 	dbPool, err := postgres.NewPool(postgresURL)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to connect to postgres", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
-		log.Println("closing postgres connection")
+		slog.Info("closing postgres connection")
 		dbPool.Close()
 	}()
 
 	redisClient := redisqueue.NewClient(redisAddr)
 	defer func() {
-		log.Println("closing redis connection")
+		slog.Info("closing redis connection")
 		redisClient.Close()
 	}()
 
@@ -60,21 +65,18 @@ func main() {
 
 	go func() {
 		<-signalChan
-		log.Println("shutdown signal received")
+		slog.Info("shutdown signal received")
 		cancel()
 	}()
 
 	var wg sync.WaitGroup
 
-	// ==========================================
-	// NEW: Start Worker Metrics Server
-	// ==========================================
 	go func() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
-		log.Println("worker metrics server running on port :2112")
+		slog.Info("worker metrics server running", "port", "2112")
 		if err := http.ListenAndServe(":2112", mux); err != nil {
-			log.Printf("metrics server error: %v\n", err)
+			slog.Error("metrics server error", "error", err)
 		}
 	}()
 
@@ -89,7 +91,7 @@ func main() {
 	wg.Add(1)
 	go reaperSvc.Start(ctx, &wg)
 
-	log.Printf("Starting %d workers...\n", workerConcurrency)
+	slog.Info("starting workers", "concurrency", workerConcurrency)
 	for i := 1; i <= workerConcurrency; i++ {
 		w := worker.NewWorker(i, queue, service)
 		wg.Add(1)
@@ -97,5 +99,5 @@ func main() {
 	}
 
 	wg.Wait()
-	log.Println("graceful shutdown complete")
+	slog.Info("graceful shutdown complete")
 }

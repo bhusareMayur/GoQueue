@@ -23,15 +23,15 @@ func NewJobRepository(db *pgxpool.Pool) *JobRepository {
 func (r *JobRepository) Create(ctx context.Context, j *job.Job) error {
 	query := `
 	INSERT INTO jobs (
-		id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, idempotency_key
+		id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, idempotency_key, correlation_id
 	)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err := r.db.Exec(
 		ctx, query,
 		j.ID, j.Type, j.Payload, j.Status, j.Priority,
-		j.RetryCount, j.MaxRetries, j.NextRunAt, j.LastError, j.IdempotencyKey,
+		j.RetryCount, j.MaxRetries, j.NextRunAt, j.LastError, j.IdempotencyKey, j.CorrelationID,
 	)
 	return err
 }
@@ -39,18 +39,18 @@ func (r *JobRepository) Create(ctx context.Context, j *job.Job) error {
 func (r *JobRepository) GetByID(ctx context.Context, id uuid.UUID) (*job.Job, error) {
 	query := `
 	SELECT
-		id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, created_at, updated_at, worker_id, processing_started_at, idempotency_key
+		id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, created_at, updated_at, worker_id, processing_started_at, idempotency_key, correlation_id
 	FROM jobs
 	WHERE id = $1
 	`
 
 	var j job.Job
-	var lastError *string 
+	var lastError *string
 
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&j.ID, &j.Type, &j.Payload, &j.Status, &j.Priority, 
+		&j.ID, &j.Type, &j.Payload, &j.Status, &j.Priority,
 		&j.RetryCount, &j.MaxRetries, &j.NextRunAt, &lastError,
-		&j.CreatedAt, &j.UpdatedAt, &j.WorkerID, &j.ProcessingStartedAt, &j.IdempotencyKey,
+		&j.CreatedAt, &j.UpdatedAt, &j.WorkerID, &j.ProcessingStartedAt, &j.IdempotencyKey, &j.CorrelationID,
 	)
 
 	if err != nil {
@@ -67,18 +67,18 @@ func (r *JobRepository) GetByID(ctx context.Context, id uuid.UUID) (*job.Job, er
 func (r *JobRepository) GetByIdempotencyKey(ctx context.Context, key string) (*job.Job, error) {
 	query := `
 	SELECT
-		id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, created_at, updated_at, worker_id, processing_started_at, idempotency_key
+		id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, created_at, updated_at, worker_id, processing_started_at, idempotency_key, correlation_id
 	FROM jobs
 	WHERE idempotency_key = $1
 	`
 
 	var j job.Job
-	var lastError *string 
+	var lastError *string
 
 	err := r.db.QueryRow(ctx, query, key).Scan(
 		&j.ID, &j.Type, &j.Payload, &j.Status, &j.Priority,
 		&j.RetryCount, &j.MaxRetries, &j.NextRunAt, &lastError,
-		&j.CreatedAt, &j.UpdatedAt, &j.WorkerID, &j.ProcessingStartedAt, &j.IdempotencyKey,
+		&j.CreatedAt, &j.UpdatedAt, &j.WorkerID, &j.ProcessingStartedAt, &j.IdempotencyKey, &j.CorrelationID,
 	)
 
 	if err != nil {
@@ -120,10 +120,10 @@ func (r *JobRepository) MoveToDLQ(ctx context.Context, dj *job.DeadJob) error {
 	defer tx.Rollback(ctx)
 
 	insertDLQQuery := `
-	INSERT INTO dead_jobs (id, type, payload, priority, retry_count, failed_at, last_error)
-	VALUES ($1, $2, $3, $4, $5, $6, $7)
+	INSERT INTO dead_jobs (id, type, payload, priority, retry_count, failed_at, last_error, correlation_id)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
-	_, err = tx.Exec(ctx, insertDLQQuery, dj.ID, dj.Type, dj.Payload, dj.Priority, dj.RetryCount, dj.FailedAt, dj.LastError)
+	_, err = tx.Exec(ctx, insertDLQQuery, dj.ID, dj.Type, dj.Payload, dj.Priority, dj.RetryCount, dj.FailedAt, dj.LastError, dj.CorrelationID)
 	if err != nil { return err }
 
 	updateJobQuery := `
@@ -150,7 +150,7 @@ func (r *JobRepository) ClaimJob(ctx context.Context, id uuid.UUID, workerID str
 
 func (r *JobRepository) GetStuckJobs(ctx context.Context, cutoffTime time.Time) ([]*job.Job, error) {
 	query := `
-	SELECT id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, created_at, updated_at, worker_id, processing_started_at, idempotency_key
+	SELECT id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, created_at, updated_at, worker_id, processing_started_at, idempotency_key, correlation_id
 	FROM jobs
 	WHERE status = 'processing' AND processing_started_at < $1
 	`
@@ -167,7 +167,7 @@ func (r *JobRepository) GetStuckJobs(ctx context.Context, cutoffTime time.Time) 
 		err := rows.Scan(
 			&j.ID, &j.Type, &j.Payload, &j.Status, &j.Priority,
 			&j.RetryCount, &j.MaxRetries, &j.NextRunAt, &lastError,
-			&j.CreatedAt, &j.UpdatedAt, &j.WorkerID, &j.ProcessingStartedAt, &j.IdempotencyKey,
+			&j.CreatedAt, &j.UpdatedAt, &j.WorkerID, &j.ProcessingStartedAt, &j.IdempotencyKey, &j.CorrelationID,
 		)
 		if err != nil {
 			return nil, err
