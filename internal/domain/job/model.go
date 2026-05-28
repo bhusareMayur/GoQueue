@@ -11,12 +11,13 @@ type Job struct {
 	Type                string
 	Payload             []byte
 	Status              string
+	Priority            string     // NEW: Priority level (high, medium, low, default)
 	RetryCount          int
 	MaxRetries          int
-	NextRunAt           *time.Time // pointer because it can be nil
+	NextRunAt           *time.Time
 	LastError           string
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
-	WorkerID            *string    // NEW: Tracks which worker took it
-	ProcessingStartedAt *time.Time // NEW: Tracks when processing started
+	WorkerID            *string
+	ProcessingStartedAt *time.Time
 }

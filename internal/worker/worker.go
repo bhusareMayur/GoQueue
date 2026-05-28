@@ -43,7 +43,6 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 		default:
 		}
 
-		// 1. Consume job ID from Redis
 		jobID, err := w.queue.Consume(ctx)
 		if err != nil {
 			log.Printf("%s consume error: %v\n", workerName, err)
@@ -60,16 +59,12 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 			continue
 		}
 
-		// 2. Fetch job from PostgreSQL
 		jobRec, err := w.service.GetJob(context.Background(), parsedID)
 		if err != nil {
 			log.Printf("%s error fetching job from db: %v\n", workerName, err)
 			continue
 		}
 
-		// ============================================
-		// 3. NEW: Claim job for Visibility Timeout
-		// ============================================
 		err = w.service.ClaimJob(context.Background(), parsedID, workerName)
 		if err != nil {
 			log.Printf("%s error claiming job: %v\n", workerName, err)
@@ -78,25 +73,18 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 
 		log.Printf("%s processing job: %s\n", workerName, jobID)
 		
-		// Simulate work
 		time.Sleep(1 * time.Second) 
 
-		// *To test the Reaper, uncomment this line below to simulate a HARD CRASH!*
-		// if rand.Intn(3) == 0 { log.Fatalf("%s CRASHED mid-job!", workerName) }
-
-		// 4. Simulate Job Failure (~50% chance)
 		var execErr error
 		if rand.Intn(2) == 0 {
 			execErr = errors.New("simulated random failure")
 		}
 
-		// 5. Retry Logic & Exponential Backoff
 		if execErr != nil {
 			log.Printf("%s job failed: %v\n", workerName, execErr)
 			
 			retryCount := jobRec.RetryCount + 1
 
-			// 8. Check Max Retries Limit & Move to DLQ
 			if retryCount > jobRec.MaxRetries {
 				log.Printf("%s max retries exceeded for job %s. Moving to DLQ.\n", workerName, jobID)
 				
@@ -107,27 +95,24 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 				continue
 			}
 
-			// 6. Calculate Exponential Backoff Delay
 			delay := time.Duration(math.Pow(2, float64(retryCount))) * time.Second
 			nextRunAt := time.Now().Add(delay)
 
 			log.Printf("retry attempt %d in %v\n", retryCount, delay)
 
-			// 9. Persist Last Error and Next Retry Info
 			err = w.service.UpdateJobRetry(context.Background(), parsedID, retryCount, execErr.Error(), &nextRunAt, "pending")
 			if err != nil {
 				log.Printf("%s error updating retry status: %v\n", workerName, err)
 			}
 
-			// 7. Non-Blocking Delayed Retry (Using Redis ZSET)
-			err = w.queue.EnqueueDelayed(context.Background(), jobID, nextRunAt)
+			// Pass Priority when enqueuing a delayed retry
+			err = w.queue.EnqueueDelayed(context.Background(), jobID, jobRec.Priority, nextRunAt)
 			if err != nil {
 				log.Printf("%s error enqueuing delayed job: %v\n", workerName, err)
 			}
 			continue
 		}
 
-		// 5. Mark completed if success path is hit
 		err = w.service.UpdateJobStatus(context.Background(), parsedID, "completed")
 		if err != nil {
 			log.Printf("%s error updating job status to completed: %v\n", workerName, err)

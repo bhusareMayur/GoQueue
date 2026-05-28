@@ -23,11 +23,18 @@ func NewQueue(
 func (q *Queue) Enqueue(
 	ctx context.Context,
 	jobID string,
+	priority string,
 ) error {
+	
+	// Default to 'jobs' if priority is not specified, otherwise use 'jobs:<priority>'
+	queueName := "jobs"
+	if priority != "" && priority != "default" {
+		queueName = "jobs:" + priority
+	}
 
 	return q.client.LPush(
 		ctx,
-		"jobs",
+		queueName,
 		jobID,
 	).Err()
 }
@@ -36,38 +43,44 @@ func (q *Queue) Consume(
 	ctx context.Context,
 ) (string, error) {
 
-	// STEP 6: Problem With BRPOP - Use 5 seconds timeout instead of 0
+	// STRICT PRIORITY SCHEDULING:
+	// BRPOP checks keys in order. It will always drain jobs:high before touching jobs:medium.
 	result, err := q.client.BRPop(
 		ctx,
 		5*time.Second,
-		"jobs",
+		"jobs:high", "jobs:medium", "jobs:low", "jobs",
 	).Result()
 
 	if err != nil {
-		// If the error is simply a timeout (no jobs found in 5s), return empty string
 		if err == goredis.Nil {
 			return "", nil
 		}
 		return "", err
 	}
 
+	// result[0] is the queue name it popped from, result[1] is the job ID
 	return result[1], nil
 }
 
-// ADD THIS FUNCTION AT THE BOTTOM
 func (q *Queue) EnqueueDelayed(
 	ctx context.Context,
 	jobID string,
+	priority string,
 	runAt time.Time,
 ) error {
 	
-	// ZAdd adds to a Sorted Set. We use the Unix timestamp as the "Score"
+	// Embed priority into the member string so the scheduler knows where to push it later
+	member := jobID
+	if priority != "" && priority != "default" {
+		member = jobID + ":" + priority
+	}
+
 	return q.client.ZAdd(
 		ctx,
 		"delayed_jobs",
 		goredis.Z{
 			Score:  float64(runAt.Unix()),
-			Member: jobID,
+			Member: member,
 		},
 	).Err()
 }

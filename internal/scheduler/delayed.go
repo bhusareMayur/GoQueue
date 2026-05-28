@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -22,7 +23,6 @@ func NewDelayedScheduler(client *goredis.Client) *DelayedScheduler {
 func (s *DelayedScheduler) Start(ctx context.Context) {
 	log.Println("delayed job scheduler started")
 	
-	// Tick every 1 second
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -40,7 +40,6 @@ func (s *DelayedScheduler) Start(ctx context.Context) {
 func (s *DelayedScheduler) processDelayedJobs(ctx context.Context) {
 	now := time.Now().Unix()
 
-	// Get all jobs where the timestamp is NOW or in the PAST
 	opt := &goredis.ZRangeBy{
 		Min: "-inf",
 		Max: strconv.FormatInt(now, 10),
@@ -52,12 +51,19 @@ func (s *DelayedScheduler) processDelayedJobs(ctx context.Context) {
 		return
 	}
 
-	for _, jobID := range jobs {
-		// Use a Redis Pipeline (Transaction) to atomically remove from delayed queue
-		// and push to the main queue so we don't lose jobs if it crashes midway.
+	for _, member := range jobs {
+		// Split the member string to extract JobID and Priority
+		parts := strings.SplitN(member, ":", 2)
+		jobID := parts[0]
+		queueName := "jobs" // default
+		
+		if len(parts) == 2 {
+			queueName = "jobs:" + parts[1]
+		}
+
 		pipe := s.client.TxPipeline()
-		pipe.ZRem(ctx, "delayed_jobs", jobID)
-		pipe.LPush(ctx, "jobs", jobID)
+		pipe.ZRem(ctx, "delayed_jobs", member)
+		pipe.LPush(ctx, queueName, jobID) // Push to correct priority queue
 
 		_, err := pipe.Exec(ctx)
 		if err != nil {
@@ -65,6 +71,6 @@ func (s *DelayedScheduler) processDelayedJobs(ctx context.Context) {
 			continue
 		}
 		
-		log.Printf("scheduler moved job %s back to main queue\n", jobID)
+		log.Printf("scheduler moved job %s back to %s\n", jobID, queueName)
 	}
 }

@@ -6,10 +6,11 @@ import (
 )
 
 type Queue interface {
-	Enqueue(ctx context.Context, jobID string) error
+	// NEW: Added priority parameter
+	Enqueue(ctx context.Context, jobID string, priority string) error
 	
 	Consume(ctx context.Context) (string, error)
 
-	// NEW: Add ability to enqueue a job for the future
-	EnqueueDelayed(ctx context.Context, jobID string, runAt time.Time) error
+	// NEW: Added priority parameter
+	EnqueueDelayed(ctx context.Context, jobID string, priority string, runAt time.Time) error
 }

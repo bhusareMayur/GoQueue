@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,12 +20,18 @@ func NewService(repo Repository, queue Queue) *Service {
 	}
 }
 
-func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte) (*Job, error) {
+func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte, priority string) (*Job, error) {
+	priority = strings.ToLower(priority)
+	if priority != "high" && priority != "medium" && priority != "low" {
+		priority = "default"
+	}
+
 	j := &Job{
 		ID:         uuid.New(),
 		Type:       jobType,
 		Payload:    payload,
 		Status:     "pending",
+		Priority:   priority,
 		RetryCount: 0,
 		MaxRetries: 5,
 	}
@@ -33,7 +40,7 @@ func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte)
 		return nil, err
 	}
 
-	if err := s.queue.Enqueue(ctx, j.ID.String()); err != nil {
+	if err := s.queue.Enqueue(ctx, j.ID.String(), j.Priority); err != nil {
 		return nil, err
 	}
 
@@ -62,6 +69,7 @@ func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string
 		ID:         id,
 		Type:       j.Type,
 		Payload:    j.Payload,
+		Priority:   j.Priority,
 		RetryCount: j.RetryCount,
 		LastError:  errMessage,
 		FailedAt:   time.Now(),
@@ -70,16 +78,11 @@ func (s *Service) MoveToDLQ(ctx context.Context, id uuid.UUID, errMessage string
 	return s.repo.MoveToDLQ(ctx, deadJob)
 }
 
-// ==========================================
-// NEW: Visibility Timeout & Reaper Functions
-// ==========================================
-
 func (s *Service) ClaimJob(ctx context.Context, id uuid.UUID, workerID string) error {
 	return s.repo.ClaimJob(ctx, id, workerID)
 }
 
 func (s *Service) GetStuckJobs(ctx context.Context, timeout time.Duration) ([]*Job, error) {
-	// Cutoff is the current time minus the timeout duration
 	cutoffTime := time.Now().Add(-timeout)
 	return s.repo.GetStuckJobs(ctx, cutoffTime)
 }

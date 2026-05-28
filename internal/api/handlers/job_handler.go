@@ -10,8 +10,9 @@ import (
 )
 
 type CreateJobRequest struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
+	Type     string          `json:"type"`
+	Payload  json.RawMessage `json:"payload"`
+	Priority string          `json:"priority"` // NEW: Read priority from client request
 }
 
 type UpdateJobStatusRequest struct {
@@ -53,6 +54,7 @@ func (h *JobHandler) CreateJob(
 		r.Context(),
 		req.Type,
 		req.Payload,
+		req.Priority, // Pass Priority to service
 	)
 
 	if err != nil {

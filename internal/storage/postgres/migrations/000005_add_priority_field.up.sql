@@ -1,0 +1,5 @@
+ALTER TABLE jobs
+ADD COLUMN priority TEXT NOT NULL DEFAULT 'default';
+
+ALTER TABLE dead_jobs
+ADD COLUMN priority TEXT NOT NULL DEFAULT 'default';
