@@ -20,6 +20,32 @@ func NewQueue(
 	}
 }
 
+// NEW: Backpressure support - gets total length of all job queues
+func (q *Queue) GetQueueLength(
+	ctx context.Context,
+) (int64, error) {
+	queues := []string{"jobs:high", "jobs:medium", "jobs:low", "jobs"}
+	
+	pipe := q.client.Pipeline()
+	var cmds []*goredis.IntCmd
+	
+	for _, queue := range queues {
+		cmds = append(cmds, pipe.LLen(ctx, queue))
+	}
+	
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	
+	var total int64
+	for _, cmd := range cmds {
+		total += cmd.Val()
+	}
+	
+	return total, nil
+}
+
 func (q *Queue) Enqueue(
 	ctx context.Context,
 	jobID string,

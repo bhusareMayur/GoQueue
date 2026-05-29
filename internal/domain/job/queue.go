@@ -6,11 +6,12 @@ import (
 )
 
 type Queue interface {
-	// NEW: Added priority parameter
+	// NEW: Added GetQueueLength for backpressure
+	GetQueueLength(ctx context.Context) (int64, error)
+
 	Enqueue(ctx context.Context, jobID string, priority string) error
 	
 	Consume(ctx context.Context) (string, error)
 
-	// NEW: Added priority parameter
 	EnqueueDelayed(ctx context.Context, jobID string, priority string, runAt time.Time) error
 }

@@ -19,6 +19,9 @@ type mockQueue struct {
 	enqueueCalls int
 }
 
+func (m *mockQueue) GetQueueLength(ctx context.Context) (int64, error) {
+	return 0, nil
+}
 func (m *mockQueue) Enqueue(ctx context.Context, jobID string, priority string) error {
 	m.enqueueCalls++
 	return nil

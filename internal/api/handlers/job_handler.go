@@ -21,14 +21,17 @@ type UpdateJobStatusRequest struct {
 }
 
 type JobHandler struct {
-	service *job.Service
+	service          *job.Service
+	maxQueueCapacity int64 // NEW: Max capacity configuration
 }
 
 func NewJobHandler(
 	service *job.Service,
+	maxQueueCapacity int64,
 ) *JobHandler {
 	return &JobHandler{
-		service: service,
+		service:          service,
+		maxQueueCapacity: maxQueueCapacity,
 	}
 }
 
@@ -36,6 +39,23 @@ func (h *JobHandler) CreateJob(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	// NEW: Backpressure Pre-Flight Check
+	if h.maxQueueCapacity > 0 {
+		qLen, err := h.service.GetQueueLength(r.Context())
+		if err != nil {
+			slog.Error("failed to get queue length", "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		
+		if qLen >= h.maxQueueCapacity {
+			slog.Warn("system overload: max queue capacity reached", "current_length", qLen, "max_capacity", h.maxQueueCapacity)
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "system overloaded, please try again later", http.StatusTooManyRequests)
+			return
+		}
+	}
+
 	var req CreateJobRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -46,7 +66,6 @@ func (h *JobHandler) CreateJob(
 
 	idempotencyKey := r.Header.Get("Idempotency-Key")
 	
-	// NEW: Extract or Generate Correlation ID
 	correlationID := r.Header.Get("X-Correlation-ID")
 	if correlationID == "" {
 		correlationID = uuid.New().String()

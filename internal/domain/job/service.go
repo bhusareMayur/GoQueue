@@ -22,6 +22,11 @@ func NewService(repo Repository, queue Queue) *Service {
 	}
 }
 
+// NEW: Backpressure helper
+func (s *Service) GetQueueLength(ctx context.Context) (int64, error) {
+	return s.queue.GetQueueLength(ctx)
+}
+
 func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte, priority string, idempotencyKey string, correlationID string) (*Job, error) {
 	if idempotencyKey != "" {
 		existingJob, err := s.repo.GetByIdempotencyKey(ctx, idempotencyKey)
