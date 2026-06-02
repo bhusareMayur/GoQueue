@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=40&pause=1000&color=00ADD8&center=true&vCenter=true&width=600&height=80&lines=GoQueue%2B%2B+🚀;Fault-Tolerant+Job+Engine;Zero+Job+Loss+Guarantee" alt="GoQueue++ Typing SVG" />
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=28&pause=1000&color=3B82F6&center=true&vCenter=true&width=700&lines=Fault-Tolerant+Distributed+Job+Queue;Built+with+Go+%7C+Redis+%7C+PostgreSQL;Crash+Recovery+%7C+DLQ+%7C+Retries;Observability+with+Prometheus+%26+Grafana" />
+</p>
+
 
 <br/>
 
