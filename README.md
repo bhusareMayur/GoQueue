@@ -214,7 +214,7 @@ Licensed under the terms in [LICENSE](./LICENSE).
 
 <div align="center">
 
-**GoQueue v1.0 — Built in Public, 12 posts later.**
+**GoQueue v1.0**
 
 *Built with Go · Redis · PostgreSQL · Prometheus · Grafana*
 
