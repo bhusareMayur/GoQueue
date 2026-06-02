@@ -1,8 +1,6 @@
 <div align="center">
 
-# GoQueue++
-
-### Distributed Background Job Processing Engine
+<img src="https://capsule-render.vercel.app/api?type=waving&height=220&text=GoQueue&fontAlign=50&fontAlignY=40&color=0:0F172A,25:1E3A8A,50:2563EB,75:3B82F6,100:60A5FA&fontColor=ffffff&fontSize=65&animation=fadeIn&desc=Distributed%20Background%20Job%20Processing%20Engine&descAlignY=65"/>
 
 
 <p align="center">
