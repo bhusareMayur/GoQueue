@@ -23,7 +23,6 @@
 
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](./LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square)](./CONTRIBUTING.md)
-[![Built in Public](https://img.shields.io/badge/Built_in_Public-12_posts-00ADD8?style=flat-square)](https://github.com/bhusaremayur/goqueue)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)](https://github.com/bhusaremayur/goqueue)
 
 </div>
@@ -63,7 +62,7 @@ GoQueue solves this by **decoupling job creation from job execution**:
 | ☠️ **Dead Letter Queue** | Permanently failed jobs routed for inspection and replay |
 | 💀 **Crash recovery** | Visibility timeouts + Reaper service recover stuck jobs |
 | 🎯 **Priority dispatching** | High · Medium · Low priority queues |
-| 🔑 **Idempotency keys** | Safe job creation — no accidental duplicates |
+| 🔑 **Idempotency keys** | Safe job creation - no accidental duplicates |
 | 🔍 **Correlation IDs** | Every job traceable end-to-end via structured JSON logs |
 | 🛑 **Backpressure shedding** | Returns `HTTP 429` when queue capacity is exceeded |
 | 📊 **Full observability** | Prometheus metrics + Grafana dashboards out of the box |
@@ -137,7 +136,7 @@ GoQueue solves this by **decoupling job creation from job execution**:
 
 ## 🚀 Quick Start
 
-> The fastest way to run GoQueue is via Docker Compose — spins up the API, workers, PostgreSQL, Redis, Prometheus, and Grafana in **one command**.
+> The fastest way to run GoQueue is via Docker Compose - spins up the API, workers, PostgreSQL, Redis, Prometheus, and Grafana in **one command**.
 
 ### Prerequisites
 
@@ -213,7 +212,7 @@ goqueue/
 
 ## 🔍 Observability
 
-GoQueue treats observability as a **first-class concern** — not an afterthought.
+GoQueue treats observability as a **first-class concern** - not an afterthought.
 
 ### Structured JSON Logging
 
@@ -233,7 +232,7 @@ Every log line carries a `correlation_id` for full request traceability:
 
 ### Prometheus Metrics
 
-Exposed at `/metrics` — all critical signals tracked:
+Exposed at `/metrics` - all critical signals tracked:
 
 ```
 goqueue_jobs_enqueued_total        →  Total jobs submitted
@@ -289,7 +288,7 @@ Infrastructure  →  Docker + Docker Compose
 
 ## 🤝 Contributing
 
-Contributions are welcome — bug reports, feature suggestions, and pull requests alike.
+Contributions are welcome - bug reports, feature suggestions, and pull requests alike.
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/your-feature`
@@ -297,7 +296,7 @@ Contributions are welcome — bug reports, feature suggestions, and pull request
 4. Push to the branch: `git push origin feat/your-feature`
 5. Open a Pull Request
 
-Please read [**CONTRIBUTING.md**](./CONTRIBUTING.md) before submitting — it covers running the test suite locally and the PR process.
+Please read [**CONTRIBUTING.md**](./CONTRIBUTING.md) before submitting - it covers running the test suite locally and the PR process.
 
 ---
 
@@ -309,7 +308,7 @@ Licensed under the terms in [**LICENSE**](./LICENSE).
 
 <div align="center">
 
-**GoQueue v1.0 — Built in Public, 12 posts later.**
+**GoQueue v1.0**
 
 *Built with ❤️ using Go · Redis · PostgreSQL · Prometheus · Grafana*
 
