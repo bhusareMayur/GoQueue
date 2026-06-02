@@ -9,13 +9,16 @@ services:
       POSTGRES_DB: goqueue
     ports:
       - "5432:5432"
+    command: postgres -c max_connections=1000
+    # NEW: This saves your data on your local machine so it isn't deleted!
+    volumes:
+      - postgres_data:/var/lib/postgresql/data 
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
 
-  # NEW: Prometheus Service
   prometheus:
     image: prom/prometheus:latest
     volumes:
@@ -23,13 +26,17 @@ services:
     ports:
       - "9090:9090"
     extra_hosts:
-      - "host.docker.internal:host-gateway" # Fixes localhost networking for Linux users
+      - "host.docker.internal:host-gateway"
 
   grafana:
     image: grafana/grafana:latest
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin # Sets the default password to 'admin'
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     depends_on:
       - prometheus
+
+# Declare the named volume at the bottom
+volumes:
+  postgres_data:
