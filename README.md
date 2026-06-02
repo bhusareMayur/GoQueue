@@ -1,5 +1,10 @@
 <div align="center">
 
+# GoQueue++
+
+### Distributed Background Job Processing Engine
+
+
 <p align="center">
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=28&pause=1000&color=3B82F6&center=true&vCenter=true&width=700&lines=Fault-Tolerant+Distributed+Job+Queue;Built+with+Go+%7C+Redis+%7C+PostgreSQL;Crash+Recovery+%7C+DLQ+%7C+Retries;Observability+with+Prometheus+%26+Grafana" />
 </p>
