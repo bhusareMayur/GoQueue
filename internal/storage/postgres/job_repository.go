@@ -190,3 +190,75 @@ func (r *JobRepository) RequeueStuckJob(ctx context.Context, id uuid.UUID) error
 	_, err := r.db.Exec(ctx, query, time.Now(), id)
 	return err
 }
+
+func (r *JobRepository) CreateWithOutbox(ctx context.Context, j *job.Job, event *job.OutboxEvent) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	jobQuery := `
+	INSERT INTO jobs (
+		id, type, payload, status, priority, retry_count, max_retries, next_run_at, last_error, idempotency_key, correlation_id
+	)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`
+	_, err = tx.Exec(
+		ctx, jobQuery,
+		j.ID, j.Type, j.Payload, j.Status, j.Priority,
+		j.RetryCount, j.MaxRetries, j.NextRunAt, j.LastError, j.IdempotencyKey, j.CorrelationID,
+	)
+	if err != nil {
+		return err
+	}
+
+	outboxQuery := `
+	INSERT INTO outbox_events (id, job_id, priority, status, created_at)
+	VALUES ($1, $2, $3, $4, $5)
+	`
+	_, err = tx.Exec(ctx, outboxQuery, event.ID, event.JobID, event.Priority, event.Status, event.CreatedAt)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *JobRepository) GetPendingOutboxEvents(ctx context.Context, limit int) ([]*job.OutboxEvent, error) {
+	// SKIP LOCKED prevents multiple publisher instances from claiming the same rows
+	query := `
+	SELECT id, job_id, priority, status, created_at
+	FROM outbox_events
+	WHERE status = 'pending'
+	ORDER BY created_at ASC
+	LIMIT $1
+	FOR UPDATE SKIP LOCKED
+	`
+	rows, err := r.db.Query(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []*job.OutboxEvent
+	for rows.Next() {
+		var e job.OutboxEvent
+		if err := rows.Scan(&e.ID, &e.JobID, &e.Priority, &e.Status, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		events = append(events, &e)
+	}
+
+	return events, nil
+}
+
+func (r *JobRepository) MarkOutboxEventPublished(ctx context.Context, id uuid.UUID) error {
+	query := `
+	UPDATE outbox_events
+	SET status = 'published', published_at = NOW()
+	WHERE id = $1
+	`
+	_, err := r.db.Exec(ctx, query, id)
+	return err
+}

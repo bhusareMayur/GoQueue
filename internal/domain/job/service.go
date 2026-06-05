@@ -62,16 +62,20 @@ func (s *Service) CreateJob(ctx context.Context, jobType string, payload []byte,
 		CorrelationID:  corrID,
 	}
 
-	if err := s.repo.Create(ctx, j); err != nil {
+	event := &OutboxEvent{
+		ID:        uuid.New(),
+		JobID:     j.ID,
+		Priority:  j.Priority,
+		Status:    "pending",
+		CreatedAt: time.Now(),
+	}
+
+	// Atomically save both Job and OutboxEvent to Postgres
+	if err := s.repo.CreateWithOutbox(ctx, j, event); err != nil {
 		return nil, err
 	}
 
-	if err := s.queue.Enqueue(ctx, j.ID.String(), j.Priority); err != nil {
-		return nil, err
-	}
-
-	metrics.JobsEnqueued.WithLabelValues(j.Priority).Inc()
-
+	// We NO LONGER enqueue to Redis here. The background Publisher will handle it.
 	return j, nil
 }
 
@@ -124,4 +128,12 @@ func (s *Service) GetStuckJobs(ctx context.Context, timeout time.Duration) ([]*J
 
 func (s *Service) RequeueStuckJob(ctx context.Context, id uuid.UUID) error {
 	return s.repo.RequeueStuckJob(ctx, id)
+}
+// Add these to the bottom of the file
+func (s *Service) GetPendingOutboxEvents(ctx context.Context, limit int) ([]*OutboxEvent, error) {
+	return s.repo.GetPendingOutboxEvents(ctx, limit)
+}
+
+func (s *Service) MarkOutboxEventPublished(ctx context.Context, id uuid.UUID) error {
+	return s.repo.MarkOutboxEventPublished(ctx, id)
 }

@@ -32,8 +32,8 @@ func (m *mockQueue) EnqueueDelayed(ctx context.Context, jobID string, priority s
 }
 
 type mockRepo struct {
-	existingJob *Job
-	createCalls int
+	existingJob           *Job
+	createWithOutboxCalls int
 }
 
 func (m *mockRepo) GetByIdempotencyKey(ctx context.Context, key string) (*Job, error) {
@@ -44,12 +44,21 @@ func (m *mockRepo) GetByIdempotencyKey(ctx context.Context, key string) (*Job, e
 	return nil, errors.New("job not found")
 }
 
-func (m *mockRepo) Create(ctx context.Context, j *Job) error {
-	m.createCalls++
+func (m *mockRepo) CreateWithOutbox(ctx context.Context, j *Job, event *OutboxEvent) error {
+	m.createWithOutboxCalls++
+	return nil
+}
+
+func (m *mockRepo) GetPendingOutboxEvents(ctx context.Context, limit int) ([]*OutboxEvent, error) {
+	return nil, nil
+}
+
+func (m *mockRepo) MarkOutboxEventPublished(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
 // Stub remaining required Repository interface methods
+func (m *mockRepo) Create(ctx context.Context, j *Job) error { return nil }
 func (m *mockRepo) GetByID(ctx context.Context, id uuid.UUID) (*Job, error) { return nil, nil }
 func (m *mockRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error { return nil }
 func (m *mockRepo) UpdateRetry(ctx context.Context, id uuid.UUID, retryCount int, lastError string, nextRunAt *time.Time, status string) error { return nil }
@@ -70,7 +79,7 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 
 		idempotencyKey := "test-key-123"
 
-		// Execute - Added "" as the 6th argument for correlationID
+		// Execute
 		j, err := svc.CreateJob(context.Background(), "email", []byte(`{}`), "high", idempotencyKey, "")
 
 		// Assert
@@ -80,9 +89,11 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 		assert.NotNil(t, j.IdempotencyKey)
 		assert.Equal(t, idempotencyKey, *j.IdempotencyKey)
 		
-		// Ensure database and queue were called exactly once
-		assert.Equal(t, 1, repo.createCalls, "Expected Repo.Create to be called once")
-		assert.Equal(t, 1, queue.enqueueCalls, "Expected Queue.Enqueue to be called once")
+		// Ensure database outbox transaction was called exactly once
+		assert.Equal(t, 1, repo.createWithOutboxCalls, "Expected Repo.CreateWithOutbox to be called once")
+		
+		// Ensure Queue.Enqueue is NO LONGER called synchronously (Outbox pattern handles this)
+		assert.Equal(t, 0, queue.enqueueCalls, "Expected Queue.Enqueue to NOT be called synchronously")
 	})
 
 	t.Run("duplicate request returns existing job (idempotent)", func(t *testing.T) {
@@ -100,7 +111,7 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 		queue := &mockQueue{}
 		svc := NewService(repo, queue)
 
-		// Execute - Added "" as the 6th argument for correlationID
+		// Execute
 		j, err := svc.CreateJob(context.Background(), "email", []byte(`{}`), "high", idempotencyKey, "")
 
 		// Assert
@@ -109,7 +120,7 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 		assert.Equal(t, "completed", j.Status, "Should return the existing job's updated status")
 
 		// Ensure we DID NOT create a new record in the DB or push to Redis
-		assert.Equal(t, 0, repo.createCalls, "Expected Repo.Create to NOT be called")
+		assert.Equal(t, 0, repo.createWithOutboxCalls, "Expected Repo.CreateWithOutbox to NOT be called")
 		assert.Equal(t, 0, queue.enqueueCalls, "Expected Queue.Enqueue to NOT be called")
 	})
 
@@ -125,7 +136,7 @@ func TestService_CreateJob_Idempotency(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, j.IdempotencyKey, "IdempotencyKey should be nil for standard jobs")
 		
-		assert.Equal(t, 1, repo.createCalls, "Expected Repo.Create to be called once")
-		assert.Equal(t, 1, queue.enqueueCalls, "Expected Queue.Enqueue to be called once")
+		assert.Equal(t, 1, repo.createWithOutboxCalls, "Expected Repo.CreateWithOutbox to be called once")
+		assert.Equal(t, 0, queue.enqueueCalls, "Expected Queue.Enqueue to NOT be called synchronously")
 	})
 }

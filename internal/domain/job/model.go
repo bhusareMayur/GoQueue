@@ -23,3 +23,11 @@ type Job struct {
 	IdempotencyKey      *string
 	CorrelationID       *string // NEW: Correlation ID for structured logging
 }
+type OutboxEvent struct {
+	ID          uuid.UUID
+	JobID       uuid.UUID
+	Priority    string
+	Status      string
+	CreatedAt   time.Time
+	PublishedAt *time.Time
+}

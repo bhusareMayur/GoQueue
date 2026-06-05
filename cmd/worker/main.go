@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/bhusareMayur/goqueue/internal/domain/job"
+	"github.com/bhusareMayur/goqueue/internal/publisher"
 	redisqueue "github.com/bhusareMayur/goqueue/internal/queue/redis"
 	"github.com/bhusareMayur/goqueue/internal/reaper"
 	"github.com/bhusareMayur/goqueue/internal/scheduler"
@@ -33,7 +34,7 @@ func main() {
 
 	postgresURL := os.Getenv("POSTGRES_URL")
 	redisAddr := os.Getenv("REDIS_ADDR")
-	
+
 	workerConcurrency := 1
 	if wc, err := strconv.Atoi(os.Getenv("WORKER_CONCURRENCY")); err == nil {
 		workerConcurrency = wc
@@ -90,6 +91,12 @@ func main() {
 	reaperSvc := reaper.NewReaper(service, queue)
 	wg.Add(1)
 	go reaperSvc.Start(ctx, &wg)
+
+	// --- ADDED: Start the Outbox Publisher Worker ---
+	pub := publisher.NewPublisher(service, queue)
+	wg.Add(1)
+	go pub.Start(ctx, &wg)
+	// ------------------------------------------------
 
 	slog.Info("starting workers", "concurrency", workerConcurrency)
 	for i := 1; i <= workerConcurrency; i++ {

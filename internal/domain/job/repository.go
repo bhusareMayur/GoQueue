@@ -19,4 +19,8 @@ type Repository interface {
 	ClaimJob(ctx context.Context, id uuid.UUID, workerID string) error
 	GetStuckJobs(ctx context.Context, cutoffTime time.Time) ([]*Job, error)
 	RequeueStuckJob(ctx context.Context, id uuid.UUID) error
+
+	CreateWithOutbox(ctx context.Context, job *Job, event *OutboxEvent) error
+	GetPendingOutboxEvents(ctx context.Context, limit int) ([]*OutboxEvent, error)
+	MarkOutboxEventPublished(ctx context.Context, id uuid.UUID) error
 }
