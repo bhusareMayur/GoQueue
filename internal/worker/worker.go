@@ -2,11 +2,11 @@ package worker
 
 import (
 	"context"
-	"errors"
+	// "errors"
 	"fmt"
 	"log/slog"
 	"math"
-	"math/rand"
+	// "math/rand"
 	"sync"
 	"time"
 
@@ -84,12 +84,12 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 		jobLogger.Info("processing job started")
 		
 		start := time.Now() 
-		time.Sleep(1 * time.Second) 
+		time.Sleep(50 * time.Millisecond)
 
 		var execErr error
-		if rand.Intn(2) == 0 {
-			execErr = errors.New("simulated random failure")
-		}
+		// if rand.Intn(2) == 0 {
+		// 	execErr = errors.New("simulated random failure")
+		// }
 
 		duration := time.Since(start).Seconds()
 		metrics.JobProcessingDuration.WithLabelValues(jobRec.Priority).Observe(duration)

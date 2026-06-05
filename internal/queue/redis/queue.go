@@ -2,48 +2,63 @@ package redis
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
 
 type Queue struct {
-	client *goredis.Client
+	client       *goredis.Client
+	cachedLength atomic.Int64
 }
 
 func NewQueue(
 	client *goredis.Client,
 ) *Queue {
 
-	return &Queue{
+	q := &Queue{
 		client: client,
+	}
+
+	// Start background goroutine to cache queue length every 100ms
+	go q.startQueueLengthPinger()
+
+	return q
+}
+
+// Background worker to poll Redis so the API doesn't block
+func (q *Queue) startQueueLengthPinger() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	ctx := context.Background()
+	
+	for range ticker.C {
+		queues := []string{"jobs:high", "jobs:medium", "jobs:low", "jobs"}
+		
+		pipe := q.client.Pipeline()
+		var cmds []*goredis.IntCmd
+		
+		for _, queue := range queues {
+			cmds = append(cmds, pipe.LLen(ctx, queue))
+		}
+		
+		_, err := pipe.Exec(ctx)
+		if err == nil {
+			var total int64
+			for _, cmd := range cmds {
+				total += cmd.Val()
+			}
+			// Update the thread-safe counter
+			q.cachedLength.Store(total)
+		}
 	}
 }
 
-// NEW: Backpressure support - gets total length of all job queues
+// GetQueueLength now reads instantly from memory instead of hitting Redis
 func (q *Queue) GetQueueLength(
 	ctx context.Context,
 ) (int64, error) {
-	queues := []string{"jobs:high", "jobs:medium", "jobs:low", "jobs"}
-	
-	pipe := q.client.Pipeline()
-	var cmds []*goredis.IntCmd
-	
-	for _, queue := range queues {
-		cmds = append(cmds, pipe.LLen(ctx, queue))
-	}
-	
-	_, err := pipe.Exec(ctx)
-	if err != nil {
-		return 0, err
-	}
-	
-	var total int64
-	for _, cmd := range cmds {
-		total += cmd.Val()
-	}
-	
-	return total, nil
+	return q.cachedLength.Load(), nil
 }
 
 func (q *Queue) Enqueue(
@@ -52,7 +67,6 @@ func (q *Queue) Enqueue(
 	priority string,
 ) error {
 	
-	// Default to 'jobs' if priority is not specified, otherwise use 'jobs:<priority>'
 	queueName := "jobs"
 	if priority != "" && priority != "default" {
 		queueName = "jobs:" + priority
@@ -69,8 +83,6 @@ func (q *Queue) Consume(
 	ctx context.Context,
 ) (string, error) {
 
-	// STRICT PRIORITY SCHEDULING:
-	// BRPOP checks keys in order. It will always drain jobs:high before touching jobs:medium.
 	result, err := q.client.BRPop(
 		ctx,
 		5*time.Second,
@@ -84,7 +96,6 @@ func (q *Queue) Consume(
 		return "", err
 	}
 
-	// result[0] is the queue name it popped from, result[1] is the job ID
 	return result[1], nil
 }
 
@@ -95,7 +106,6 @@ func (q *Queue) EnqueueDelayed(
 	runAt time.Time,
 ) error {
 	
-	// Embed priority into the member string so the scheduler knows where to push it later
 	member := jobID
 	if priority != "" && priority != "default" {
 		member = jobID + ":" + priority

@@ -69,6 +69,7 @@ export default function () {
             'Content-Type': 'application/json',
             'Idempotency-Key': uuidv4(), // Unique key per request
             'X-Correlation-ID': uuidv4(),
+            'Connection': 'keep-alive',
         },
     };
 
