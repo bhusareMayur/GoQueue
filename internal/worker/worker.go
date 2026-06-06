@@ -68,7 +68,7 @@ func (w *Worker) Start(ctx context.Context, wg *sync.WaitGroup) {
 			workerLogger.Error("error fetching job from db", "job_id", jobID, "error", err)
 			continue
 		}
-
+		
 		// Inject correlation ID into all subsequent logs for this job
 		jobLogger := workerLogger.With("job_id", jobID)
 		if jobRec.CorrelationID != nil {
