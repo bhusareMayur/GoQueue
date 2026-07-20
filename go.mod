@@ -1,4 +1,4 @@
-module github.com/bhusareMayur/goqueue
+module github.com/bhusareMayur/GoQueue
 
 go 1.26.3
 

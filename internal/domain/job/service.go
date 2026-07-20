@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/bhusareMayur/goqueue/internal/observability/metrics"
+	"github.com/bhusareMayur/GoQueue/internal/observability/metrics"
 )
 
 type Service struct {

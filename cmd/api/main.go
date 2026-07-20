@@ -8,12 +8,12 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"github.com/bhusareMayur/goqueue/internal/api"
-	"github.com/bhusareMayur/goqueue/internal/api/handlers"
-	"github.com/bhusareMayur/goqueue/internal/domain/job"
-	redisqueue "github.com/bhusareMayur/goqueue/internal/queue/redis"
-	"github.com/bhusareMayur/goqueue/internal/storage/postgres"
-	"github.com/bhusareMayur/goqueue/pkg/logger"
+	"github.com/bhusareMayur/GoQueue/internal/api"
+	"github.com/bhusareMayur/GoQueue/internal/api/handlers"
+	"github.com/bhusareMayur/GoQueue/internal/domain/job"
+	redisqueue "github.com/bhusareMayur/GoQueue/internal/queue/redis"
+	"github.com/bhusareMayur/GoQueue/internal/storage/postgres"
+	"github.com/bhusareMayur/GoQueue/pkg/logger"
 )
 
 func main() {

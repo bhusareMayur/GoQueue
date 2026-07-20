@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/bhusareMayur/goqueue/internal/api/handlers"
+	"github.com/bhusareMayur/GoQueue/internal/api/handlers"
 )
 
 func NewRouter(

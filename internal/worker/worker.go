@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/bhusareMayur/goqueue/internal/domain/job"
-	"github.com/bhusareMayur/goqueue/internal/observability/metrics"
+	"github.com/bhusareMayur/GoQueue/internal/domain/job"
+	"github.com/bhusareMayur/GoQueue/internal/observability/metrics"
 )
 
 type Worker struct {

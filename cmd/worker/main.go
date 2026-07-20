@@ -13,14 +13,14 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/bhusareMayur/goqueue/internal/domain/job"
-	"github.com/bhusareMayur/goqueue/internal/publisher"
-	redisqueue "github.com/bhusareMayur/goqueue/internal/queue/redis"
-	"github.com/bhusareMayur/goqueue/internal/reaper"
-	"github.com/bhusareMayur/goqueue/internal/scheduler"
-	"github.com/bhusareMayur/goqueue/internal/storage/postgres"
-	"github.com/bhusareMayur/goqueue/internal/worker"
-	"github.com/bhusareMayur/goqueue/pkg/logger"
+	"github.com/bhusareMayur/GoQueue/internal/domain/job"
+	"github.com/bhusareMayur/GoQueue/internal/publisher"
+	redisqueue "github.com/bhusareMayur/GoQueue/internal/queue/redis"
+	"github.com/bhusareMayur/GoQueue/internal/reaper"
+	"github.com/bhusareMayur/GoQueue/internal/scheduler"
+	"github.com/bhusareMayur/GoQueue/internal/storage/postgres"
+	"github.com/bhusareMayur/GoQueue/internal/worker"
+	"github.com/bhusareMayur/GoQueue/pkg/logger"
 )
 
 func main() {

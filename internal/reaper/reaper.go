@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bhusareMayur/goqueue/internal/domain/job"
+	"github.com/bhusareMayur/GoQueue/internal/domain/job"
 )
 
 type Reaper struct {

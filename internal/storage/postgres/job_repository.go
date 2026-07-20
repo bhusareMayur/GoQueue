@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/bhusareMayur/goqueue/internal/domain/job"
+	"github.com/bhusareMayur/GoQueue/internal/domain/job"
 )
 
 type JobRepository struct {
