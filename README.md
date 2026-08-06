@@ -75,68 +75,21 @@ GoQueue solves this by **decoupling job creation from job execution**:
 
 ---
 
-## 🏗️ Architecture
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║                      CLIENT REQUEST                         ║
-╚══════════════════════════╤═══════════════════════════════════╝
-                           │
-                           ▼
-              ┌────────────────────────┐
-              │      API Server        │  :8080
-              └────────┬───────────────┘
-                       │
-           ┌───────────┼───────────┐
-           ▼                       ▼
-  ┌────────────────┐    ┌────────────────────┐
-  │  PostgreSQL    │    │       Redis        │
-  │  (durable      │    │  (fast dispatch)   │
-  │   job store)   │    └──────────┬─────────┘
-  └────────────────┘               │
-                        ┌──────────┼──────────┐
-                        ▼          ▼           ▼
-                   ┌─────────┐ ┌───────┐ ┌────────┐
-                   │  HIGH   │ │  MED  │ │  LOW   │
-                   │ priority│ │  pri  │ │  pri   │
-                   └────┬────┘ └───┬───┘ └───┬────┘
-                        └──────────┼──────────┘
-                                   ▼
-                    ┌──────────────────────────┐
-                    │        Worker Pool        │
-                    │  ┌────────┐  ┌────────┐  │
-                    │  │Worker 1│  │Worker 2│  │
-                    │  └────────┘  └────────┘  │
-                    │        ┌────────┐         │
-                    │        │Worker N│         │
-                    │        └────────┘         │
-                    └──────────────────────────┘
-                                   │
-               ┌───────────────────┼────────────────────┐
-               ▼                   ▼                     ▼
-      ┌────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-      │  Retry Queue   │  │       DLQ       │  │ Visibility TMO  │
-      │ (exp. backoff) │  │  (failed jobs)  │  │ (crash detect)  │
-      └────────────────┘  └─────────────────┘  └────────┬────────┘
-                                                          │
-                                                          ▼
-                                               ┌─────────────────┐
-                                               │ Reaper Service  │
-                                               │ (crash recovery)│
-                                               └────────┬────────┘
-                                                        │
-                                               ┌────────▼────────┐
-                                               │ Job re-enqueued │
-                                               └─────────────────┘
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Observability Layer  →  Prometheus ──▶ Grafana Dashboard
-                          Structured JSON Logs + Correlation IDs
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
 ---
 
+## 🏗️ Architecture
+
+<p align="center">
+  <img src="assets/Architecture.png"
+       alt="GoQueue Distributed Job Processing Architecture"
+       width="100%">
+</p>
+
+<p align="center">
+  <em>End-to-end architecture of GoQueue showing job creation, reliable delivery, distributed workers, retry orchestration, crash recovery, and observability.</em>
+</p>
+
+---
 ## 🚀 Quick Start
 
 > The fastest way to run GoQueue is via Docker Compose - spins up the API, workers, PostgreSQL, Redis, Prometheus, and Grafana in **one command**.
